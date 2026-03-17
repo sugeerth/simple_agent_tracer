@@ -1,20 +1,21 @@
 """OMNISCOPE API Server."""
 from __future__ import annotations
 
-import asyncio
 import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from .models import TraceEvent, IngestBatch, TraceOverview, TraceGraph, TimelineEntry, RiskScores
 from .store import TraceStore
 from .risk import RiskEngine
+from .auth import AuthStore
 
 
 # ---------------------------------------------------------------------------
@@ -22,8 +23,22 @@ from .risk import RiskEngine
 # ---------------------------------------------------------------------------
 store = TraceStore()
 risk_engine = RiskEngine()
+auth_store = AuthStore()
 ws_connections: dict[str, list[WebSocket]] = {}  # trace_id -> websockets
 global_ws: list[WebSocket] = []  # for trace list updates
+
+
+# ---------------------------------------------------------------------------
+# Auth request models
+# ---------------------------------------------------------------------------
+class SignupRequest(BaseModel):
+    email: str
+    username: str
+    password: str
+
+class LoginRequest(BaseModel):
+    username_or_email: str
+    password: str
 
 
 @asynccontextmanager
@@ -40,6 +55,38 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Auth API
+# ---------------------------------------------------------------------------
+
+@app.post("/api/v1/auth/signup")
+async def signup(req: SignupRequest) -> dict[str, Any]:
+    result = auth_store.signup(req.email, req.username, req.password)
+    return result
+
+@app.post("/api/v1/auth/login")
+async def login(req: LoginRequest) -> dict[str, Any]:
+    result = auth_store.login(req.username_or_email, req.password)
+    return result
+
+@app.post("/api/v1/auth/logout")
+async def logout(authorization: str = Header(default="")) -> dict[str, str]:
+    token = authorization.replace("Bearer ", "") if authorization else ""
+    if token:
+        auth_store.logout(token)
+    return {"status": "ok"}
+
+@app.get("/api/v1/auth/me")
+async def auth_me(authorization: str = Header(default="")) -> dict[str, Any]:
+    token = authorization.replace("Bearer ", "") if authorization else ""
+    if not token:
+        return {"error": "not authenticated"}
+    user = auth_store.validate_token(token)
+    if not user:
+        return {"error": "invalid or expired token"}
+    return user
 
 
 # ---------------------------------------------------------------------------

@@ -1,1 +1,0 @@
-"""OMNISCOPE Schema Definitions."""
