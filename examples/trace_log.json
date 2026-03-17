@@ -1,0 +1,352 @@
+{
+  "trace_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "trace_name": "Analyze product photo and write listing",
+  "started_at": "2026-03-16T14:32:00.000Z",
+  "completed_at": "2026-03-16T14:32:04.200Z",
+  "duration_ms": 4200,
+  "total_events": 23,
+  "total_tokens": 12847,
+  "total_cost_usd": 0.043,
+  "composite_quality_score": 0.91,
+  "agents_involved": ["orchestrator", "planner", "vision", "writer", "critic"],
+
+  "events": [
+    {
+      "event_id": "evt-001",
+      "timestamp": "2026-03-16T14:32:00.000Z",
+      "span_id": "span-001",
+      "parent_span_id": null,
+      "agent_id": "orchestrator",
+      "event_type": "agent_decision",
+      "model_name": "claude-opus-4-6",
+      "input_modalities": ["text", "image"],
+      "output_modalities": ["text"],
+      "input_tokens": 312,
+      "output_tokens": 87,
+      "latency_ms": 120,
+      "confidence_score": 0.95,
+      "prompt_payload": {
+        "system_prompt": "You are an orchestrator agent. Decompose tasks and delegate to specialist agents.",
+        "user_prompt": "Analyze the attached product photo and write a compelling e-commerce listing.",
+        "images": ["artifact:img-001-product-photo"],
+        "tools_available": ["delegate_to_planner", "delegate_to_vision", "delegate_to_writer", "delegate_to_critic"]
+      },
+      "response_payload": {
+        "text": "I'll decompose this into: (1) visual analysis, (2) listing draft, (3) quality review. Delegating to planner.",
+        "finish_reason": "stop",
+        "tool_calls": [
+          {"tool_name": "delegate_to_planner", "input": {"task": "decompose_product_listing", "image_ref": "artifact:img-001-product-photo"}}
+        ]
+      },
+      "causal_parents": [],
+      "tags": {"phase": "initialization"}
+    },
+
+    {
+      "event_id": "evt-002",
+      "timestamp": "2026-03-16T14:32:00.120Z",
+      "span_id": "span-002",
+      "parent_span_id": "span-001",
+      "agent_id": "planner",
+      "event_type": "planning_step",
+      "model_name": "claude-sonnet-4-6",
+      "input_modalities": ["text"],
+      "output_modalities": ["structured"],
+      "input_tokens": 245,
+      "output_tokens": 156,
+      "latency_ms": 220,
+      "confidence_score": 0.92,
+      "response_payload": {
+        "text": "",
+        "finish_reason": "stop",
+        "tool_calls": []
+      },
+      "metadata": {
+        "plan": {
+          "steps": [
+            {"id": "step-1", "agent": "vision", "task": "Extract visual features, colors, materials, brand elements"},
+            {"id": "step-2", "agent": "writer", "task": "Draft listing from visual description + product context", "depends_on": ["step-1"]},
+            {"id": "step-3", "agent": "critic", "task": "Evaluate listing quality, check image-text alignment", "depends_on": ["step-2"]}
+          ]
+        }
+      },
+      "causal_parents": ["evt-001"],
+      "tags": {"phase": "planning"}
+    },
+
+    {
+      "event_id": "evt-003",
+      "timestamp": "2026-03-16T14:32:00.360Z",
+      "span_id": "span-003",
+      "parent_span_id": "span-002",
+      "agent_id": "vision",
+      "event_type": "image_transform",
+      "model_name": null,
+      "input_modalities": ["image"],
+      "output_modalities": ["embedding"],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "latency_ms": 50,
+      "vision_payload": {
+        "original_image_ref": "artifact:img-001-product-photo",
+        "preprocessed_ref": "artifact:img-001-preprocessed",
+        "image_resolution": [1024, 768],
+        "patch_grid": [14, 14],
+        "embedding_dims": 768,
+        "attention_map_ref": "artifact:attn-001",
+        "top_attended_regions": [
+          {"bbox": [120, 80, 400, 350], "score": 0.94, "label": "product_main"},
+          {"bbox": [450, 200, 650, 400], "score": 0.72, "label": "brand_logo"},
+          {"bbox": [100, 400, 900, 700], "score": 0.61, "label": "background_context"}
+        ],
+        "clip_similarity": 0.87,
+        "ocr_detected_text": "PREMIUM QUALITY",
+        "object_detections": [
+          {"label": "leather_bag", "bbox": [120, 80, 400, 350], "confidence": 0.96},
+          {"label": "metal_clasp", "bbox": [280, 150, 320, 190], "confidence": 0.89},
+          {"label": "brand_tag", "bbox": [450, 200, 650, 400], "confidence": 0.91}
+        ]
+      },
+      "causal_parents": ["evt-002"],
+      "tags": {"phase": "vision_encoding", "modality_transition": "image_to_embedding"}
+    },
+
+    {
+      "event_id": "evt-004",
+      "timestamp": "2026-03-16T14:32:00.410Z",
+      "span_id": "span-004",
+      "parent_span_id": "span-003",
+      "agent_id": "vision",
+      "event_type": "modality_transition",
+      "input_modalities": ["embedding", "image"],
+      "output_modalities": ["text"],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "latency_ms": 110,
+      "metadata": {
+        "transition": "cross_modal_attention_fusion",
+        "alignment_score": 0.88,
+        "fusion_method": "cross_attention_pooling"
+      },
+      "causal_parents": ["evt-003"],
+      "tags": {"phase": "fusion", "modality_transition": "embedding_to_text"}
+    },
+
+    {
+      "event_id": "evt-005",
+      "timestamp": "2026-03-16T14:32:00.520Z",
+      "span_id": "span-005",
+      "parent_span_id": "span-004",
+      "agent_id": "vision",
+      "event_type": "llm_call",
+      "model_name": "claude-opus-4-6",
+      "input_modalities": ["text", "image"],
+      "output_modalities": ["text"],
+      "input_tokens": 1024,
+      "output_tokens": 312,
+      "latency_ms": 370,
+      "confidence_score": 0.93,
+      "response_payload": {
+        "text": "VISUAL ANALYSIS:\n- Product: Premium leather crossbody bag\n- Color: Cognac brown, rich warm tone\n- Material: Full-grain leather with visible natural grain pattern\n- Hardware: Brushed gold metal clasp and chain strap\n- Brand: 'PREMIUM QUALITY' embossed tag visible\n- Condition: New, no visible wear\n- Style: Minimalist, modern with classic leather craftsmanship\n- Notable: Adjustable chain strap, interior pocket visible through opening\n- Background: Styled on marble surface with plant accent (lifestyle setting)",
+        "finish_reason": "stop"
+      },
+      "causal_parents": ["evt-004"],
+      "tags": {"phase": "vision_analysis"}
+    },
+
+    {
+      "event_id": "evt-006",
+      "timestamp": "2026-03-16T14:32:00.910Z",
+      "span_id": "span-006",
+      "parent_span_id": "span-005",
+      "agent_id": "writer",
+      "event_type": "llm_call",
+      "model_name": "claude-opus-4-6",
+      "input_modalities": ["text"],
+      "output_modalities": ["text"],
+      "input_tokens": 1456,
+      "output_tokens": 487,
+      "latency_ms": 930,
+      "confidence_score": 0.88,
+      "response_payload": {
+        "text": "## Premium Cognac Leather Crossbody Bag\n\nElevate your everyday carry with this handcrafted full-grain leather crossbody bag in a rich cognac brown. The natural grain pattern ensures each piece is uniquely yours.\n\n**Key Features:**\n- Full-grain leather construction for lasting durability\n- Brushed gold hardware with secure clasp closure\n- Adjustable chain strap for crossbody or shoulder wear\n- Interior pocket for organized essentials\n- Minimalist design that transitions from day to evening\n\n**Dimensions:** 10\" x 7\" x 3\"\n\nCrafted for those who appreciate timeless quality and modern simplicity. This bag tells a story that only gets better with age.\n\n*Free shipping on orders over $75*",
+        "finish_reason": "stop"
+      },
+      "causal_parents": ["evt-005"],
+      "data_dependencies": ["evt-005"],
+      "tags": {"phase": "draft_v1"}
+    },
+
+    {
+      "event_id": "evt-007",
+      "timestamp": "2026-03-16T14:32:01.860Z",
+      "span_id": "span-007",
+      "parent_span_id": "span-006",
+      "agent_id": "critic",
+      "event_type": "llm_call",
+      "model_name": "claude-opus-4-6",
+      "input_modalities": ["text", "image"],
+      "output_modalities": ["text"],
+      "input_tokens": 2100,
+      "output_tokens": 234,
+      "latency_ms": 650,
+      "confidence_score": 0.85,
+      "response_payload": {
+        "text": "REVIEW:\n\n1. ACCURACY: Description matches image well. The leather, color, and hardware are correctly described.\n\n2. ISSUES FOUND:\n   a. Dimensions '10 x 7 x 3 inches' are fabricated -- not verifiable from the image. REMOVE or mark as approximate.\n   b. 'Free shipping' claim has no basis in the task context. REMOVE.\n\n3. STRENGTHS: Compelling copy, good feature extraction, appropriate tone for e-commerce.\n\n4. RECOMMENDATION: Fix the two flagged issues and resubmit.",
+        "finish_reason": "stop"
+      },
+      "causal_parents": ["evt-006"],
+      "data_dependencies": ["evt-005", "evt-006"],
+      "tags": {"phase": "review_v1"}
+    },
+
+    {
+      "event_id": "evt-008",
+      "timestamp": "2026-03-16T14:32:02.910Z",
+      "span_id": "span-008",
+      "parent_span_id": null,
+      "agent_id": "system",
+      "event_type": "judge_evaluation",
+      "model_name": "llama3.1:8b",
+      "input_tokens": 2800,
+      "output_tokens": 1450,
+      "latency_ms": 400,
+      "judge_payload": {
+        "judge_id": "hallucination_judge_v1",
+        "judge_type": "hallucination",
+        "model_used": "llama3.1:8b",
+        "primary_score": 0.18,
+        "confidence_interval": [0.12, 0.24],
+        "reasoning_trace": "Two unsupported claims identified: (1) specific dimensions '10 x 7 x 3 inches' cannot be verified from image alone, (2) 'Free shipping on orders over $75' is a business policy claim with no source. All other descriptive claims are well-grounded in the image content.",
+        "flagged_spans": [
+          {"start": 412, "end": 438, "issue": "Fabricated dimensions not verifiable from image", "severity": "medium"},
+          {"start": 520, "end": 555, "issue": "Unsupported business policy claim", "severity": "low"}
+        ],
+        "judge_latency_ms": 400,
+        "judge_token_cost": 1450
+      },
+      "causal_parents": ["evt-006"],
+      "tags": {"phase": "evaluation_v1", "judge": "hallucination"}
+    },
+
+    {
+      "event_id": "evt-009",
+      "timestamp": "2026-03-16T14:32:03.100Z",
+      "span_id": "span-009",
+      "parent_span_id": "span-007",
+      "agent_id": "writer",
+      "event_type": "llm_call",
+      "model_name": "claude-opus-4-6",
+      "input_modalities": ["text"],
+      "output_modalities": ["text"],
+      "input_tokens": 1890,
+      "output_tokens": 289,
+      "latency_ms": 680,
+      "confidence_score": 0.94,
+      "response_payload": {
+        "text": "## Premium Cognac Leather Crossbody Bag\n\nElevate your everyday carry with this handcrafted full-grain leather crossbody bag in a rich cognac brown. The natural grain pattern ensures each piece is uniquely yours.\n\n**Key Features:**\n- Full-grain leather construction for lasting durability\n- Brushed gold hardware with secure clasp closure\n- Adjustable chain strap for crossbody or shoulder wear\n- Interior pocket for organized essentials\n- Minimalist design that transitions from day to evening\n\nCrafted for those who appreciate timeless quality and modern simplicity. This bag tells a story that only gets better with age.",
+        "finish_reason": "stop"
+      },
+      "causal_parents": ["evt-007"],
+      "data_dependencies": ["evt-006", "evt-007"],
+      "tags": {"phase": "draft_v2", "revision": "removed_fabricated_dimensions_and_shipping"}
+    },
+
+    {
+      "event_id": "evt-010",
+      "timestamp": "2026-03-16T14:32:03.980Z",
+      "span_id": "span-010",
+      "parent_span_id": "span-009",
+      "agent_id": "critic",
+      "event_type": "agent_decision",
+      "model_name": "claude-opus-4-6",
+      "input_tokens": 1800,
+      "output_tokens": 89,
+      "latency_ms": 220,
+      "confidence_score": 0.96,
+      "response_payload": {
+        "text": "APPROVED. All previously flagged issues resolved. Listing is accurate to the image content, compelling, and free of fabricated claims.",
+        "finish_reason": "stop"
+      },
+      "causal_parents": ["evt-009"],
+      "tags": {"phase": "review_v2", "status": "approved"}
+    },
+
+    {
+      "event_id": "evt-011",
+      "timestamp": "2026-03-16T14:32:04.010Z",
+      "span_id": "span-011",
+      "parent_span_id": null,
+      "agent_id": "system",
+      "event_type": "judge_evaluation",
+      "model_name": "llama3.1:8b",
+      "input_tokens": 2200,
+      "output_tokens": 890,
+      "latency_ms": 190,
+      "judge_payload": {
+        "judge_id": "composite_evaluation",
+        "judge_type": "reasoning",
+        "model_used": "llama3.1:8b",
+        "primary_score": 0.91,
+        "confidence_interval": [0.88, 0.94],
+        "dimension_scores": {
+          "reasoning_quality": 0.91,
+          "factual_accuracy": 0.93,
+          "hallucination_risk": 0.05,
+          "multimodal_alignment": 0.92,
+          "safety_score": 0.99,
+          "self_consistency": 0.88
+        },
+        "reasoning_trace": "Post-revision evaluation. All hallucinated content removed. Image-text alignment strong across all visual features. No safety concerns. Minor consistency note: tone slightly shifts between feature list and closing paragraph, but within acceptable range.",
+        "flagged_spans": [],
+        "judge_latency_ms": 190,
+        "judge_token_cost": 890
+      },
+      "causal_parents": ["evt-009"],
+      "tags": {"phase": "evaluation_v2", "judge": "composite"}
+    },
+
+    {
+      "event_id": "evt-012",
+      "timestamp": "2026-03-16T14:32:04.200Z",
+      "span_id": "span-012",
+      "parent_span_id": "span-001",
+      "agent_id": "orchestrator",
+      "event_type": "agent_decision",
+      "model_name": "claude-opus-4-6",
+      "input_tokens": 420,
+      "output_tokens": 56,
+      "latency_ms": 90,
+      "confidence_score": 0.97,
+      "response_payload": {
+        "text": "Task complete. Final listing approved by critic (v2), composite quality score 0.91. Returning result.",
+        "finish_reason": "stop"
+      },
+      "causal_parents": ["evt-010", "evt-011"],
+      "tags": {"phase": "completion"}
+    }
+  ],
+
+  "risk_summary": {
+    "max_risk_agent": "writer",
+    "max_risk_score": 0.18,
+    "max_risk_mode": "hallucination_spike",
+    "risk_resolved": true,
+    "resolution_event": "evt-009"
+  },
+
+  "composite_evaluation": {
+    "composite_score": 0.91,
+    "composite_confidence": [0.88, 0.94],
+    "breakdown": {
+      "reasoning": 0.91,
+      "factuality": 0.93,
+      "hallucination_risk": 0.05,
+      "mm_alignment": 0.92,
+      "safety": 0.99,
+      "consistency": 0.88
+    },
+    "flags": [],
+    "requires_human_review": false
+  }
+}

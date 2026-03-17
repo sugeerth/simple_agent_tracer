@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+.env
+node_modules/
+dashboard/dist/
+dashboard/node_modules/
+.claude/
+*.egg-info/
+dist/
+build/
+.vite/
