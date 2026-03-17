@@ -19,8 +19,20 @@ export function useAuth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Validate stored token on mount
+  // On mount: validate stored token, or auto-enter demo mode on GitHub Pages
   useEffect(() => {
+    const isGitHubPages = window.location.hostname.endsWith('.github.io');
+
+    // Auto-enter demo mode on GitHub Pages (no backend available)
+    if (!user && isGitHubPages) {
+      const demoUser = { user_id: 'demo', username: 'demo', email: 'demo@omniscope.dev' };
+      setUser(demoUser);
+      setToken('demo');
+      localStorage.setItem(USER_KEY, JSON.stringify(demoUser));
+      localStorage.setItem(TOKEN_KEY, 'demo');
+      return;
+    }
+
     if (!token) return;
     fetch(`${API}/me`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
