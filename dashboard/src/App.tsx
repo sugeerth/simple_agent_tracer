@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useTraceList, useTraceGraph, useTimeline, useRisk } from './hooks/useTraceData';
+import { useAuth } from './hooks/useAuth';
 import AgentGraph from './components/AgentGraph';
 import Timeline from './components/Timeline';
 import RiskHeatmap from './components/RiskHeatmap';
 import JudgeDashboard from './components/JudgeDashboard';
 import EventDetail from './components/EventDetail';
+import LoginPage from './components/LoginPage';
 
 type View = 'graph' | 'timeline' | 'risk' | 'judges';
 
@@ -13,12 +15,26 @@ export default function App() {
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<View>('graph');
 
+  const auth = useAuth();
   const { traces, loading, demoMode } = useTraceList();
   const { graph } = useTraceGraph(selectedTrace);
   const timeline = useTimeline(selectedTrace);
   const risk = useRisk(selectedTrace);
 
   const currentTrace = traces.find(t => t.trace_id === selectedTrace);
+
+  // Show login page if not authenticated
+  if (!auth.user) {
+    return (
+      <LoginPage
+        onLogin={auth.login}
+        onSignup={auth.signup}
+        onDemoMode={auth.enterDemoMode}
+        loading={auth.loading}
+        error={auth.error}
+      />
+    );
+  }
 
   return (
     <div className="app-layout">
@@ -51,6 +67,13 @@ export default function App() {
               </div>
             </div>
           ))}
+        </div>
+        <div className="user-menu">
+          <div className="user-info">
+            <div>{auth.user.username}</div>
+            <div className="user-email">{auth.user.email}</div>
+          </div>
+          <button className="logout-btn" onClick={auth.logout}>Sign Out</button>
         </div>
       </div>
 
