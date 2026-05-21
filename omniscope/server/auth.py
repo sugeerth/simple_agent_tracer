@@ -116,6 +116,10 @@ class AuthStore:
         }
 
     def validate_token(self, token: str) -> dict[str, Any] | None:
+        # Demo token: always valid, used by GitHub Pages and local-dev shim.
+        if token == "demo":
+            return {"user_id": "demo", "username": "demo", "email": "demo@omniscope.dev"}
+
         conn = self._get_conn()
         now = datetime.utcnow().isoformat() + "Z"
 

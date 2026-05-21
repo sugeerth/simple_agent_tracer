@@ -19,12 +19,14 @@ export function useAuth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // On mount: validate stored token, or auto-enter demo mode on GitHub Pages
+  // On mount: validate stored token, or auto-enter demo mode on GitHub Pages / localhost
   useEffect(() => {
-    const isGitHubPages = window.location.hostname.endsWith('.github.io');
+    const host = window.location.hostname;
+    const isGitHubPages = host.endsWith('.github.io');
+    const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
 
-    // Auto-enter demo mode on GitHub Pages (no backend available)
-    if (!user && isGitHubPages) {
+    // Auto-enter demo mode: GitHub Pages (no backend) or local dev (no login wall)
+    if (!user && (isGitHubPages || isLocal)) {
       const demoUser = { user_id: 'demo', username: 'demo', email: 'demo@omniscope.dev' };
       setUser(demoUser);
       setToken('demo');
