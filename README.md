@@ -2,6 +2,8 @@
 
 > A multi-agent observability platform — trace, judge, predict failures, and time-travel debug multi-agent AI systems.
 
+**Live demo (GitHub Pages, demo mode):** https://sugeerth.github.io/simple_agent_tracer/
+
 ## Overview
 
 OMNISCOPE is a multi-agent observability platform built for the way modern AI systems actually behave: as dynamic DAGs where agents spawn agents, share memory, contradict each other, and fail in cascading patterns invisible to traditional request-chain tracing. It captures the causal graph of every inter-agent decision, scores quality with a panel of LLM judges, predicts failures on the live execution graph, and lets you replay and fork past runs for time-travel debugging.
