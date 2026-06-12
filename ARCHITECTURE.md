@@ -101,6 +101,18 @@ InterAgentMessage {
 
 Every message is a traced edge. You can query: "Show me all messages that led to this decision" and get a subgraph, not a list.
 
+### Claude Code Adapter (live session tracing)
+
+Claude Code persists every session as append-only JSONL under `~/.claude/projects/<munged-cwd>/<sessionId>.jsonl`, with subagent transcripts at `<sessionId>/subagents/agent-<agentId>.jsonl` and workflow runs under `<sessionId>/subagents/workflows/<runId>/`. The adapter (`omniscope/sdk/adapters/claude_code_adapter.py`) tails these files line-wise with incremental offsets and maps them onto the standard trace event model:
+
+- One trace per session (`trace_id` = sessionId; name from the session's `ai-title`, falling back to the first prompt).
+- Consecutive `assistant` lines sharing one `message.id` become a single `llm_call` event with model and token usage; user prompts become `system_event`s.
+- Each `tool_use` block becomes a `tool_call` event, completed by the matching `tool_result` line (duration = result timestamp − use timestamp; errors from `is_error`).
+- `Agent` / `Workflow` spawns are correlated via `toolUseResult` (agentId / runId), and the spawned subagent transcripts are tailed into the same trace as child agent streams linked to the spawning tool call.
+- `turn_duration` system lines become turn-summary events; snapshot/mode/queue noise lines are skipped.
+
+Deliberately KISS: stdlib file tailing plus the existing collector — no hooks into Claude Code, no daemon, no new dependencies. `trace_id` is the session id, so re-attaching maps onto the same trace, and content fields are truncated (500 chars by default): this is observability, not transcript capture.
+
 ---
 
 ## 2. Multi-LLM Judge Panel

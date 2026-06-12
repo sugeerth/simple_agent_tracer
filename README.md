@@ -81,6 +81,23 @@ python examples/quickstart.py
 python examples/execution_graph.py
 ```
 
+## Trace live Claude Code sessions
+
+Claude Code writes every session as append-only JSONL under `~/.claude/projects/`. The Claude Code adapter reads those transcripts directly — no hooks or changes to Claude Code — and streams them into OMNISCOPE as trace events: prompts, assistant turns with model and token usage, tool calls with per-call latency, and subagent/workflow spawns pulled into the same trace as linked child agents. It replays finished sessions and follows running ones live; content is truncated (500 chars by default) so traces stay observability-sized.
+
+```bash
+# 1. Start the server
+python3 -m uvicorn omniscope.server.app:app --port 8781
+
+# 2. Replay the most recent Claude Code session, then keep following it live
+python3 -m omniscope.sdk.adapters.claude_code_adapter --latest --follow
+
+# 3. Open the dashboard
+cd dashboard && npm install && npm run dev    # http://localhost:5173
+```
+
+See `examples/claude_code_live.py` for the programmatic equivalent.
+
 ## Project Structure
 
 ```
