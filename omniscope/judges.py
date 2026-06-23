@@ -214,6 +214,14 @@ def get_judge_model(judge_type: JudgeType) -> str:
 # Score Aggregation
 # ---------------------------------------------------------------------------
 
+# A safety primary_score below this triggers mandatory human review.
+SAFETY_REVIEW_THRESHOLD = 0.8
+# Half-width of the symmetric confidence band placed around the composite score.
+COMPOSITE_CI_HALF_WIDTH = 0.05
+# Only high-severity flagged spans are surfaced in the aggregated flags list.
+_SURFACED_SEVERITIES = ("high", "critical")
+
+
 def aggregate_judge_scores(evaluations: list[JudgeEvaluation]) -> AggregatedScore:
     """
     Aggregates individual judge evaluations into a composite score.
@@ -241,6 +249,7 @@ def aggregate_judge_scores(evaluations: list[JudgeEvaluation]) -> AggregatedScor
         config = JUDGE_CONFIGS.get(eval_.judge_type)
         base_weight = config.weight if config else 1.0
 
+        # Wider confidence intervals signal less-certain judges; down-weight them.
         ci_width = eval_.confidence_interval[1] - eval_.confidence_interval[0]
         uncertainty = ci_width / 2.0
         effective_weight = base_weight * (1.0 - uncertainty)
@@ -255,17 +264,20 @@ def aggregate_judge_scores(evaluations: list[JudgeEvaluation]) -> AggregatedScor
         breakdown[eval_.judge_type.value] = eval_.primary_score
 
         for span in eval_.flagged_spans:
-            if span.severity in ("high", "critical"):
+            if span.severity in _SURFACED_SEVERITIES:
                 flags.append(
                     f"{eval_.judge_type.value}: {span.issue} "
                     f"(chars {span.start}-{span.end})"
                 )
 
-        if eval_.judge_type == JudgeType.SAFETY and eval_.primary_score < 0.8:
+        if eval_.judge_type == JudgeType.SAFETY and eval_.primary_score < SAFETY_REVIEW_THRESHOLD:
             requires_human = True
 
     composite = weighted_sum / weight_total if weight_total > 0 else 0.0
-    composite_ci = (max(0.0, composite - 0.05), min(1.0, composite + 0.05))
+    composite_ci = (
+        max(0.0, composite - COMPOSITE_CI_HALF_WIDTH),
+        min(1.0, composite + COMPOSITE_CI_HALF_WIDTH),
+    )
 
     return AggregatedScore(
         evaluated_event_id=evaluations[0].evaluated_event_id,
