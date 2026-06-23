@@ -1,12 +1,11 @@
 """
-OMNISCOPE Multi-LLM Judge Framework
-====================================
+OMNISCOPE Multi-LLM Judge Framework (scaffold)
 
-Six specialized judges evaluate every output across orthogonal quality dimensions.
-Each judge produces a structured evaluation with reasoning trace.
-Results are aggregated via calibrated weighted ensemble.
-
-All judges run via Ollama by default. Override per-judge model with env vars.
+Defines six dimension-specific judges and a weighted-aggregation function. The
+judge prompts (JudgeConfig/JudgeType) and the aggregation are implemented; the
+per-judge model call and calibration are NOT yet wired -- no judge invokes a
+model here, and _calibrate() is an identity pass-through. Models are intended to
+run via Ollama by default, overridable per judge with env vars.
 """
 from __future__ import annotations
 
@@ -280,5 +279,5 @@ def aggregate_judge_scores(evaluations: list[JudgeEvaluation]) -> AggregatedScor
 
 
 def _calibrate(score: float, judge_type: JudgeType) -> float:
-    """Apply isotonic regression calibration. Identity transform until trained."""
+    """Placeholder for score calibration. Identity pass-through; no calibration is fitted yet."""
     return score

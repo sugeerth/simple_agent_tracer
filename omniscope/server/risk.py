@@ -1,4 +1,4 @@
-"""Real-time failure prediction engine."""
+"""Heuristic risk scoring over agent event streams — rule-based detectors, no learned models."""
 from __future__ import annotations
 
 from collections import defaultdict
