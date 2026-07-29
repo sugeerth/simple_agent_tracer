@@ -29,6 +29,8 @@ jobs:
 
       - name: Build dashboard
         working-directory: dashboard
+        env:
+          VITE_BASE: /simple_agent_tracer/
         run: npx vite build
 
       - name: Upload artifact
