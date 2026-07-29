@@ -1,19 +1,21 @@
 # OMNISCOPE: Multi-Agent Observability Platform
 
-## The Moat
+## Overview
 
 Most observability tools trace linear request chains. Multi-agent systems don't work that way — they're dynamic DAGs where agents spawn agents, share memory, contradict each other, and fail in cascading patterns invisible to traditional tracing.
 
-OMNISCOPE is built around **four capabilities that don't exist together anywhere else**:
+OMNISCOPE is organized around four pillars. Two are built; the other two are design sketches that this document also records.
 
-1. **Agent DAG Tracing** — Every inter-agent message, decision, and tool call captured as a node in a live causal graph, not a flat log.
-2. **Multi-LLM Judge Panel** — 6 specialized judges evaluate every output on orthogonal quality dimensions with calibrated scoring.
-3. **Predictive Failure Detection** — Real-time risk scoring on the live execution graph, predicting agent failures before they cascade.
-4. **Time-Travel Debugging** — Reconstruct system state at any point, fork execution with different parameters, compare outcomes.
+| Pillar | Status |
+|---|---|
+| **1. Agent DAG Tracing** — every inter-agent event captured as a node in a causal graph, not a flat log | **Built** — SQLite trace store + FastAPI/WebSocket API + React dashboard, plus a live Claude Code adapter |
+| **2. Heuristic Risk Detection** — rule-based scoring of live runs (loops, tool thrashing, context overflow, reasoning collapse) | **Built** — `omniscope/server/risk.py` |
+| **3. Multi-LLM Judge Panel** — dimension-specific judges with weighted aggregation | **Scaffold** — judge prompts + aggregation exist; the per-judge model call and calibration are not yet wired |
+| **4. Predictive ML / Time-Travel / Data Flywheel** — learned failure prediction, state reconstruction, counterfactual branching | **Design sketch** — described below, not implemented |
 
-These four compound: the judge panel generates training signal for the failure predictor, which improves over time via the data flywheel. No individual feature is the moat — the flywheel is.
+Each section marks its status inline. Pseudocode in the design-sketch sections describes intended behavior, not shipped code.
 
-**Local-first via Ollama.** All LLM-dependent components (judges, embedding computation, counterfactual simulation) run through Ollama by default. No API keys needed to get started, no per-evaluation cost at scale. Cloud LLMs are supported as an upgrade path for higher-quality judging, but the system is fully functional on a single machine with `ollama pull`.
+**Local-first.** Tracing, risk detection, and the dashboard run on a single machine over SQLite with no API keys. The judge panel is designed to call local models via Ollama (or cloud models per component via env vars) once its model-call layer is wired.
 
 ---
 
@@ -101,15 +103,27 @@ InterAgentMessage {
 
 Every message is a traced edge. You can query: "Show me all messages that led to this decision" and get a subgraph, not a list.
 
+### Claude Code Adapter (live session tracing)
+
+Claude Code persists every session as append-only JSONL under `~/.claude/projects/<munged-cwd>/<sessionId>.jsonl`, with subagent transcripts at `<sessionId>/subagents/agent-<agentId>.jsonl` and workflow runs under `<sessionId>/subagents/workflows/<runId>/`. The adapter (`omniscope/sdk/adapters/claude_code_adapter.py`) tails these files line-wise with incremental offsets and maps them onto the standard trace event model:
+
+- One trace per session (`trace_id` = sessionId; name from the session's `ai-title`, falling back to the first prompt).
+- Consecutive `assistant` lines sharing one `message.id` become a single `llm_call` event with model and token usage; user prompts become `system_event`s.
+- Each `tool_use` block becomes a `tool_call` event, completed by the matching `tool_result` line (duration = result timestamp − use timestamp; errors from `is_error`).
+- `Agent` / `Workflow` spawns are correlated via `toolUseResult` (agentId / runId), and the spawned subagent transcripts are tailed into the same trace as child agent streams linked to the spawning tool call.
+- `turn_duration` system lines become turn-summary events; snapshot/mode/queue noise lines are skipped.
+
+Deliberately KISS: stdlib file tailing plus the existing collector — no hooks into Claude Code, no daemon, no new dependencies. `trace_id` is the session id, so re-attaching maps onto the same trace, and content fields are truncated (500 chars by default): this is observability, not transcript capture.
+
 ---
 
-## 2. Multi-LLM Judge Panel
+## 2. Multi-LLM Judge Panel (scaffold)
 
 ### Why it matters
 
-Single-score evaluation hides failure modes. An output can have perfect factuality but broken reasoning, or safe content that contradicts what the user asked. Six judges, each focused on one dimension, with calibrated scores and confidence intervals.
+Single-score evaluation hides failure modes. An output can have perfect factuality but broken reasoning, or safe content that contradicts what the user asked. The design is six judges, each focused on one dimension, with calibrated scores and confidence intervals.
 
-Judges run locally via Ollama — no API cost per evaluation. Default model: `llama3.1:8b` for speed, `llama3.1:70b` or `qwen2.5:32b` for quality. Cloud models (Claude, GPT-4) supported as drop-in replacements when higher accuracy is worth the cost.
+**Status:** the judge prompts (`JudgeConfig`/`JudgeType`) and the weighted aggregation below are implemented; the per-judge model call and calibration are **not yet wired** — `_calibrate()` is an identity pass-through and no judge currently invokes a model. Judges are designed to run locally via Ollama (`llama3.1:8b` by default, larger models for quality), with cloud models (Claude, GPT-4) as per-component drop-in replacements.
 
 ### Architecture
 
@@ -157,7 +171,7 @@ CompositeScore = sum(w_i * calibrate(score_i)) / sum(w_i)
 
 where:
   w_i = judge_weight * (1 - uncertainty_i)   // down-weight uncertain judges
-  calibrate(s) = isotonic_regression(s)       // trained on human eval data
+  calibrate(s) = s                            // identity for now; not yet calibrated
 
 Output example:
 {
@@ -174,30 +188,32 @@ Output example:
 }
 ```
 
-The judges themselves are traced — their reasoning chains become training data for improving calibration.
+Once wired, judge evaluations are themselves traced (a `JUDGE_EVALUATION` event type) so their outputs can be reviewed alongside the run.
 
 ---
 
-## 3. Predictive Failure Detection
+## 3. Risk Detection
 
 ### Why it matters
 
-Multi-agent failures cascade. By the time the output is bad, 4 agents have wasted tokens and time. The failure predictor watches the live execution graph and raises alerts while there's still time to intervene.
+Multi-agent failures cascade. By the time the output is bad, several agents have wasted tokens and time. The risk engine watches the live event stream and raises a per-agent risk score while there's still time to intervene.
 
-### Six Failure Modes
+### Failure detectors
 
-| Failure Mode | Detection Signal | Method |
-|---|---|---|
-| **Infinite loops** | Repeated (agent, action) pairs in sliding window | DFS cycle detection + n-gram repetition |
-| **Hallucination spiral** | Claims with no embedding neighbor in retrieval store | Embedding distance via Ollama (`nomic-embed-text`) |
-| **Tool thrashing** | Same tool called > 3x with transition probability > 0.7 | Markov chain on tool sequences |
-| **Context overflow** | Token consumption rate projected to exceed window | Linear projection |
-| **Reasoning collapse** | Judge reasoning scores dropping on sliding window | Moving average threshold |
-| **Agent divergence** | Agent goal embeddings becoming orthogonal | Cosine similarity via Ollama embeddings |
+All five detectors below are heuristics over the recent event stream (`omniscope/server/risk.py`) — no embeddings or learned models are involved.
+
+| Failure Mode | Implemented signal |
+|---|---|
+| **Infinite loops** | 2-/3-gram repetition in the last ~20 `(event_type, tool)` actions |
+| **Hallucination** | low average model confidence over recent events |
+| **Context overflow** | total tokens vs. the context window (utilization) |
+| **Tool thrashing** | high tool self-transition rate + tool failure rate |
+| **Reasoning collapse** | downward trend / low average in recent confidence scores |
+| **Agent divergence** | *not implemented (returns 0.0)* |
 
 ### Risk Aggregation
 
-Heuristic detectors run immediately. Learned detectors (LSTM anomaly model, graph neural network on agent topology) improve as the data flywheel accumulates traces. Signals fuse via Bayesian aggregation into per-agent risk scores and a time-to-predicted-failure estimate.
+The heuristic detectors above run on each event stream and combine into a per-agent `overall_failure_risk`. Learned detectors (anomaly models, graph models over agent topology) and a time-to-failure estimate are design goals, not implemented — `time_to_predicted_failure` is part of the payload schema below but is not currently computed.
 
 ```
 RiskPayload {
@@ -211,7 +227,7 @@ RiskPayload {
 }
 ```
 
-### Example: Catching a Hallucination Spiral
+### Example: Catching a Hallucination Spiral (illustrative / design)
 
 ```
 T+2.1s  Researcher retrieves 3 docs (relevance: 0.82, 0.71, 0.45)
@@ -230,7 +246,9 @@ Without intervention (simulated): risk hits 0.91 by T+4.1s, output unusable.
 
 ---
 
-## 4. Time-Travel Debugging
+## 4. Time-Travel Debugging (design sketch — not implemented)
+
+*The operations and pseudocode in this section describe intended behavior. There is no `reconstruct_state`, `simulate_branch`, snapshot store, or execution engine in the codebase yet.*
 
 ### Why it matters
 
@@ -307,9 +325,9 @@ Developer sees composite score 0.52 on a trace.
 
 ---
 
-## 5. Data Flywheel
+## 5. Data Flywheel (design sketch — not implemented)
 
-Every execution produces training data that improves the platform:
+*None of the training/calibration loops below exist yet; this section records the intended design.* The idea: every execution would produce data that improves the platform:
 
 | Dataset | Source | Improves |
 |---------|--------|----------|
@@ -319,26 +337,19 @@ Every execution produces training data that improves the platform:
 | Agent routing decisions | Planner traces + outcome quality | Task decomposition |
 | Retrieval quality pairs | (query, doc, relevance) + downstream quality | Retrieval re-ranking |
 
-```
-Week 1:   Heuristic-only failure prediction. Uncalibrated judge scores.
-Week 4:   500 traces. First learned failure predictor. Loop detection 60% -> 82%.
-Week 8:   2,000 traces. Judge calibration trained. Human correlation 0.71 -> 0.84.
-Week 16:  10,000 traces. GNN topology risk model. Predicts failures 15s early (vs 3s).
-```
-
-The flywheel is the moat. Competitors can copy the architecture; they can't copy 10,000 traced executions with human-validated judge scores.
+*Status: none of the above is built — the heuristic detectors in section 3 are the only risk signal that ships today.*
 
 ---
 
 ## Ollama Configuration
 
-All LLM-dependent components talk to Ollama at `localhost:11434` by default.
+The judge panel is designed to talk to Ollama at `localhost:11434` by default. This section documents the intended model configuration — as of today the model-call layer is not wired, so nothing actually calls Ollama yet.
 
 ### Required Models
 
 ```bash
-ollama pull llama3.1:8b          # default judge model (fast)
-ollama pull nomic-embed-text     # embeddings for failure detection
+ollama pull llama3.1:8b          # intended judge model (fast)
+# nomic-embed-text is only needed if the design-sketch embedding detectors (section 3) are built
 ```
 
 ### Optional Models (higher quality)
@@ -371,20 +382,22 @@ Set any of these to a cloud model (e.g., `claude-sonnet-4-6`) to use the cloud A
 ## API Surface
 
 ```
-POST   /api/v1/traces                         # Ingest trace events (batch)
+POST   /api/v1/traces                         # Ingest a trace (with events)
+POST   /api/v1/event                          # Append a single event
+POST   /api/v1/traces/{trace_id}/complete     # Mark a trace complete
+POST   /api/v1/traces/{trace_id}/fail         # Mark a trace failed
+GET    /api/v1/traces                         # List traces
 GET    /api/v1/traces/{trace_id}              # Get full trace
-GET    /api/v1/traces/{trace_id}/graph        # Get trace as DAG
-
-POST   /api/v1/judge/evaluate                 # Trigger judge evaluation
-GET    /api/v1/judge/{eval_id}                # Get judge results
-
-GET    /api/v1/risk/{agent_id}                # Current risk scores
-GET    /api/v1/risk/{trace_id}/heatmap        # Risk heatmap data
-
-POST   /api/v1/timetravel/reconstruct         # Reconstruct state at timestamp
-POST   /api/v1/timetravel/branch              # Create counterfactual branch
-GET    /api/v1/timetravel/diff                # Compare two branches
-
+GET    /api/v1/traces/{trace_id}/graph        # Get trace as a DAG
+GET    /api/v1/traces/{trace_id}/timeline     # Get trace timeline
+GET    /api/v1/traces/{trace_id}/risk         # Risk scores for a trace
+GET    /api/v1/risk/{trace_id}/{agent_id}     # Risk scores for one agent
+GET    /api/v1/events/{event_id}              # Get one event
+GET    /api/v1/events/{event_id}/causal_chain # Events that led to this one
+GET    /api/v1/events/{event_id}/downstream   # Events this one affected
 WS     /ws/v1/traces/{trace_id}/live          # Live trace updates
-WS     /ws/v1/risk/live                       # Live risk updates
+WS     /ws/v1/updates                         # Live cross-trace updates
+
+# (plus /api/v1/auth/* for the optional dashboard login)
+# Judge and time-travel endpoints are part of the design above, not yet implemented.
 ```
