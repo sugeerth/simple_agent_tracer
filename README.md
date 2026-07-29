@@ -25,7 +25,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full system design.
 - **Language:** Python
 - **API / Server:** FastAPI, Uvicorn
 - **Frontend:** React, Vite, TypeScript (`@xyflow/react`, Recharts)
-- **LLM runtime:** none required — the package traces model calls, it does not make them (the Anthropic adapter wraps a client you pass in). The standalone `demo_interactive.py` brings its own backends: Ollama, Anthropic API, or an offline stub
+- **LLM runtime:** none required — the package traces model calls, it does not make them (the Anthropic adapter wraps a client you pass in). The root-level `demo_interactive.py` brings its own backends: Ollama, Anthropic API, or an offline stub
 - **Storage:** SQLite
 
 ## What makes this different

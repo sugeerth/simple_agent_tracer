@@ -8,7 +8,7 @@ Start the server first:
 Then run this from the repo root (as a module, so `omniscope` is importable):
     python -m examples.quickstart
 
-Open http://localhost:8781 to see traces in the dashboard.
+Traces then land at http://localhost:8781/api/v1/traces; for the dashboard UI see the README.
 """
 import time
 
