@@ -25,7 +25,7 @@ See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the full system design.
 - **Language:** Python
 - **API / Server:** FastAPI, Uvicorn
 - **Frontend:** React, Vite, TypeScript (`@xyflow/react`, Recharts)
-- **LLM runtime:** Ollama (local), with Claude / GPT-4 supported as drop-in replacements
+- **LLM runtime:** none required — the package traces model calls, it does not make them (the Anthropic adapter wraps a client you pass in). The standalone `demo_interactive.py` brings its own backends: Ollama, Anthropic API, or an offline stub
 - **Storage:** SQLite
 
 ## What makes this different
@@ -74,8 +74,9 @@ npm run dev
 ### 5. Try the examples
 
 ```bash
-python examples/quickstart.py
-python examples/execution_graph.py
+# run from the repo root, as modules, so `omniscope` is importable
+python -m examples.quickstart
+python -m examples.execution_graph
 ```
 
 ## Trace live Claude Code sessions
@@ -100,7 +101,7 @@ See `examples/claude_code_live.py` for the programmatic equivalent.
 ```
 simple_agent_tracer/
 ├── omniscope/
-│   ├── judges.py            # Multi-LLM judge panel
+│   ├── judges.py            # Multi-LLM judge panel (scaffold — not imported by the pipeline)
 │   ├── sdk/                 # Tracing SDK (collector, decorators)
 │   │   └── adapters/        # LangChain, CrewAI, AutoGen, OpenAI, Anthropic adapters
 │   └── server/              # FastAPI server

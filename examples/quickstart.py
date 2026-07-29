@@ -5,8 +5,8 @@ Start the server first:
     pip install fastapi uvicorn httpx pydantic
     python -m uvicorn omniscope.server.app:app --port 8781
 
-Then run this:
-    python examples/quickstart.py
+Then run this from the repo root (as a module, so `omniscope` is importable):
+    python -m examples.quickstart
 
 Open http://localhost:8781 to see traces in the dashboard.
 """
